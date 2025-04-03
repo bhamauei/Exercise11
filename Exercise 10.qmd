@@ -1,0 +1,311 @@
+---
+title: "Exercise10"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+Challenge 1: **One-Factor ANOVA and Inference**
+
+```{r}
+
+library(tidyverse)
+library(skimr)  
+
+d <- read_csv("C:/Users/britt/OneDrive/Documents/ADA/Development/repos/Exercise11/AVONETdataset1.csv")
+
+
+skim(d) 
+
+
+d <- d %>%
+  mutate(Migration = as.factor(Migration))
+
+
+d %>%
+  filter(!is.na(Trophic.Level)) %>%
+  ggplot(aes(x = Trophic.Level, y = log(Mass))) +
+  geom_boxplot() +
+  labs(
+    title = "Log(Mass) by Trophic Level",
+    x = "Trophic Level",
+    y = "Log(Mass)"
+  ) +
+  theme_minimal()
+
+d %>%
+  filter(!is.na(Migration)) %>%
+  ggplot(aes(x = Migration, y = log(Mass))) +
+  geom_boxplot() +
+  labs(
+    title = "Log(Mass) by Migration Behavior",
+    x = "Migration Type",
+    y = "Log(Mass)"
+  ) +
+  theme_minimal()
+
+
+model_trophic <- lm(log(Mass) ~ Trophic.Level, data = d)
+summary(model_trophic)
+
+d <- d %>%
+  mutate(Migration = as.factor(Migration))
+
+model_migration <- lm(log(Mass) ~ Migration, data = d)
+summary(model_migration)
+
+anova_migration <- aov(log(Mass) ~ Migration, data = d)
+TukeyHSD(anova_migration)
+
+library(infer)
+
+
+d_clean <- d %>%
+  filter(!is.na(Trophic.Level), !is.na(Mass)) %>%
+  mutate(log_Mass = log(Mass))
+
+observed_stat <- d_clean %>%
+  specify(log_Mass ~ Trophic.Level) %>%
+  calculate(stat = "F")
+
+null_dist <- d_clean %>%
+  specify(log_Mass ~ Trophic.Level) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "F")
+
+p_val <- null_dist %>%
+  get_p_value(obs_stat = observed_stat, direction = "greater")
+
+p_val
+
+visualize(null_dist) +
+  shade_p_value(obs_stat = observed_stat, direction = "greater")
+
+```
+
+-   Is mass associated with either trophic level or migration?
+
+    -   Yes, mass shows variation across both trophic level and migration categories. In trophic level, frugivores and carnivores tend to have higher body mass than insectivores.
+
+-   Is the F statistic large enough to reject the null hypothesis of an F value of zero?
+
+    -   The F-statistics were large enough to reject the null hypothesis that the group means are equal. Mass is significantly associated with both predictors.
+
+-   Which migration category(ies) are different from the reference level? What level is the reference level? Re-level and assess differences among the remaining pair of Migration categories.
+
+    -   The reference level is the lowest numeric level, so migration = 1 (residents) is the reference. Both migration levels 2 and 3 had significantly positive coefficients relative to level 1, so migratory species tend to have larger body mass than resident species. After re-leveling, the model showed a significant difference between levels 3 and 2, indicating a gradient in body size across increasing migratory distance.
+
+-   Which Migration categories differ?
+
+    -   All three migration categories differ from one another in mass, suggesting an increase in average body mass from residents to partial migrants to long-distance migrants. 
+
+    **Challenge 2**
+
+```{r}
+library(tidyverse)
+library(skimr)
+library(infer)
+
+d <- read_csv("C:/Users/britt/OneDrive/Documents/ADA/Development/repos/Exercise11/AVONETdataset1.csv")
+
+skim(d)
+
+d <- d %>%
+  filter(!is.na(Mass), !is.na(Beak.Length_Culmen), !is.na(Tarsus.Length)) %>%
+  mutate(log_Mass = log(Mass))
+
+beak_model <- lm(log(Beak.Length_Culmen) ~ log_Mass, data = d)
+d$Rel_Beak_Length <- resid(beak_model)
+
+tarsus_model <- lm(log(Tarsus.Length) ~ log_Mass, data = d)
+d$Rel_Tarsus_Length <- resid(tarsus_model)
+
+d %>%
+  filter(!is.na(Primary.Lifestyle)) %>%
+  ggplot(aes(x = Primary.Lifestyle, y = Rel_Tarsus_Length)) +
+  geom_boxplot() +
+  labs(
+    title = "Relative Tarsus Length by Primary Lifestyle",
+    x = "Primary Lifestyle",
+    y = "Relative Tarsus Length"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+d %>%
+  filter(!is.na(Trophic.Niche)) %>%
+  ggplot(aes(x = Trophic.Niche, y = Rel_Beak_Length)) +
+  geom_boxplot() +
+  labs(
+    title = "Relative Beak Length by Trophic Niche",
+    x = "Trophic Niche",
+    y = "Relative Beak Length"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+d_clean <- d %>%
+  filter(!is.na(Migration), !is.na(Range.Size)) %>%
+  mutate(Migration = as.factor(Migration))
+
+ggplot(d_clean, aes(x = Range.Size)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "white") +
+  labs(title = "Distribution of Range.Size")
+
+ggplot(d_clean, aes(x = log(Range.Size))) +
+  geom_histogram(bins = 30, fill = "darkgreen", color = "white") +
+  labs(title = "Distribution of log(Range.Size)")
+
+anova_model <- aov(log(Range.Size) ~ Migration, data = d_clean)
+anova_summary <- summary(anova_model)
+ss_total <- sum(anova_summary[[1]]$`Sum Sq`)
+ss_migration <- anova_summary[[1]]$`Sum Sq`[1]
+r_squared <- ss_migration / ss_total
+r_squared
+
+model_mig_range <- lm(log(Range.Size) ~ Migration, data = d_clean)
+summary(model_mig_range)
+
+d_clean <- d_clean %>%
+  mutate(Migration = relevel(Migration, ref = "2"))
+
+model_mig_range2 <- lm(log(Range.Size) ~ Migration, data = d_clean)
+summary(model_mig_range2)
+
+anova_mig_range <- aov(log(Range.Size) ~ Migration, data = d_clean)
+TukeyHSD(anova_mig_range)
+
+pass_d <- d %>%
+  filter(Order1 == "Passeriformes")
+
+ggplot(pass_d, aes(x = Primary.Lifestyle, y = Rel_Beak_Length)) +
+  geom_boxplot() +
+  labs(title = "Relative Beak Length by Primary Lifestyle (Passeriformes)",
+       x = "Primary Lifestyle", y = "Relative Beak Length") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(pass_d, aes(x = Trophic.Level, y = Rel_Beak_Length)) +
+  geom_boxplot() +
+  labs(title = "Relative Beak Length by Trophic Level (Passeriformes)",
+       x = "Trophic Level", y = "Relative Beak Length") +
+  theme_minimal()
+
+ggplot(pass_d, aes(x = Primary.Lifestyle, y = Rel_Beak_Length, fill = Trophic.Level)) +
+  geom_boxplot(position = position_dodge()) +
+  labs(title = "Relative Beak Length by Lifestyle and Trophic Level",
+       x = "Primary Lifestyle", y = "Relative Beak Length") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+model_lifestyle <- aov(Rel_Beak_Length ~ Primary.Lifestyle, data = pass_d)
+summary(model_lifestyle)
+
+model_trophic <- aov(Rel_Beak_Length ~ Trophic.Level, data = pass_d)
+summary(model_trophic)
+
+model_two_factor <- aov(Rel_Beak_Length ~ Primary.Lifestyle + Trophic.Level, data = pass_d)
+summary(model_two_factor)
+
+model_interaction <- aov(Rel_Beak_Length ~ Primary.Lifestyle + Trophic.Level + Primary.Lifestyle:Trophic.Level, data = pass_d)
+summary(model_interaction)
+
+anova(model_two_factor, model_interaction)
+
+interaction.plot(
+  x.factor = pass_d$Trophic.Level,
+  trace.factor = pass_d$Primary.Lifestyle,
+  response = pass_d$Rel_Beak_Length,
+  fun = mean,
+  type = "b",
+  legend = TRUE,
+  xlab = "Trophic Level",
+  ylab = "Mean Relative Beak Length",
+  trace.label = "Primary Lifestyle",
+  col = rainbow(length(unique(pass_d$Primary.Lifestyle))),
+  lty = 1,
+  pch = 16,
+  main = "Interaction Plot: Relative Beak Length"
+)
+
+group_sds <- pass_d %>%
+  group_by(Trophic.Level) %>%
+  summarise(
+    n = n(),
+    sd_beak = sd(Rel_Beak_Length, na.rm = TRUE)
+  )
+
+max(group_sds$sd_beak) / min(group_sds$sd_beak) < 2
+
+model <- aov(Rel_Beak_Length ~ Trophic.Level, data = pass_d)
+residuals <- resid(model)
+fitted <- fitted(model)
+
+hist(residuals, main = "Histogram of Residuals", xlab = "Residuals")
+
+qqnorm(residuals)
+qqline(residuals, col = "red")
+
+pass_d$resid <- residuals(model)
+
+ggplot(pass_d, aes(x = Trophic.Level, y = resid)) +
+  geom_boxplot() +
+  labs(title = "Residuals by Trophic Level", y = "Residuals", x = "Trophic Level") +
+  theme_minimal()
+
+pass_d %>%
+  count(Trophic.Level)
+
+d_clean <- d %>%
+  filter(!is.na(Trophic.Level), !is.na(Mass)) %>%
+  mutate(log_Mass = log(Mass))
+
+observed_stat <- d_clean %>%
+  specify(log_Mass ~ Trophic.Level) %>%
+  calculate(stat = "F")
+
+null_dist <- d_clean %>%
+  specify(log_Mass ~ Trophic.Level) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "F")
+
+p_val <- null_dist %>%
+  get_p_value(obs_stat = observed_stat, direction = "greater")
+
+p_val
+
+visualize(null_dist) +
+  shade_p_value(obs_stat = observed_stat, direction = "greater")
+
+```
+
+**Challenge 2 Questions: Data Wrangling + One- and Two-Factor ANOVA**
+
+-   Based on the global model, is range size associated with the form of migration? How much of the variance in your measure of range size is associated with migration behavior style?
+
+<!-- -->
+
+-   ANOVA showed significant differences among migration categories in geographic range size. About 14% of variation in range size is explained by the migration category. Migrants have larger ranges than residents and all migration types differ significantly from each other. Overall, yes, migration behavior is strongly associated with range size.
+
+<!-- -->
+
+-   What would you conclude about how relative beak length is related to these two variables?
+
+    -   Beak shape is shaped by both feeding behavior and ecological strategy.
+
+-   What would you now conclude about how relative beak length is related to these two variables?
+
+    -   Results indicate that the effect of one variable on beak length does not strongly depend on the other. 
